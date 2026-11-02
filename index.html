@@ -160,21 +160,6 @@
                     <input type="text" id="new-routine-name" placeholder="Ej. Día de Pierna..." class="w-full bg-slate-800 text-white rounded-xl p-4 border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-slate-500 font-medium">
                 </div>
 
-                <!-- Imagen de la Rutina -->
-                <div>
-                    <label class="block text-xs font-medium text-slate-400 mb-2 uppercase tracking-wider">Imagen de la Rutina (Opcional)</label>
-                    <input type="file" id="routine-image-input" accept="image/*" class="hidden">
-                    
-                    <div id="upload-image-container" class="relative w-full h-32 bg-slate-800 rounded-xl border border-slate-700 flex flex-col items-center justify-center overflow-hidden cursor-pointer hover:border-blue-500 transition group" onclick="document.getElementById('routine-image-input').click()">
-                        <div id="upload-image-placeholder" class="flex flex-col items-center text-slate-500 group-hover:text-blue-400 transition">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                            <span class="text-xs font-medium">Añadir Imagen</span>
-                        </div>
-                        <img id="routine-image-preview" class="hidden absolute inset-0 w-full h-full object-cover">
-                    </div>
-                    <button id="remove-image-btn" onclick="removeRoutineImage()" class="hidden mt-2 text-xs text-red-400 hover:text-red-300 transition w-full text-right font-medium">Quitar Imagen</button>
-                </div>
-
                 <div class="border-t border-slate-800 pt-6">
                     <div class="flex justify-between items-center mb-4">
                         <label class="block text-xs font-medium text-slate-400 uppercase tracking-wider">Ejercicios</label>
@@ -265,7 +250,6 @@
         let routinesData = [];
         let selectedRoutineId = null;
         let editingRoutineId = null; // ID de la rutina que se está editando
-        let currentRoutineImage = null; // Guardará la imagen en Base64
         
         // Entrenamiento activo
         let activeWorkoutSession = [];
@@ -286,13 +270,14 @@
         const newRoutineNameInput = document.getElementById('new-routine-name');
         const addViewTitle = document.getElementById('add-view-title');
 
-        window.removeRoutineImage = () => {
-            currentRoutineImage = null;
-            document.getElementById('routine-image-input').value = '';
-            document.getElementById('routine-image-preview').classList.add('hidden');
-            document.getElementById('routine-image-preview').src = '';
-            document.getElementById('remove-image-btn').classList.add('hidden');
-            document.getElementById('upload-image-placeholder').classList.remove('hidden');
+        window.removeExerciseImage = (blockId) => {
+            const block = document.getElementById(blockId);
+            if (!block) return;
+            block.querySelector('.ex-image-data').value = '';
+            block.querySelector('.ex-image-preview').classList.add('hidden');
+            block.querySelector('.ex-image-preview').src = '';
+            block.querySelector('.remove-ex-image-btn').classList.add('hidden');
+            block.querySelector('.upload-ex-image-placeholder').classList.remove('hidden');
         };
 
         // Custom Toast System
@@ -378,7 +363,6 @@
                 addViewTitle.textContent = "Nueva Rutina";
                 exercisesContainer.innerHTML = '';
                 newRoutineNameInput.value = '';
-                window.removeRoutineImage(); // Resetear imagen al abrir nueva rutina
                 addExerciseBlock(); // Iniciar con 1 bloque
             }
 
@@ -396,6 +380,48 @@
         // --- Creador/Editor de Rutinas ---
         let exerciseCount = 0;
         
+        window.processExerciseImage = (e, blockId) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_SIZE = 400; // Tamaño reducido ya que habrán múltiples imágenes por rutina
+                    let width = img.width;
+                    let height = img.height;
+                    
+                    if (width > height && width > MAX_SIZE) {
+                        height *= MAX_SIZE / width;
+                        width = MAX_SIZE;
+                    } else if (height > MAX_SIZE) {
+                        width *= MAX_SIZE / height;
+                        height = MAX_SIZE;
+                    }
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5); // Comprimir al 50%
+                    
+                    const block = document.getElementById(blockId);
+                    if(block) {
+                        block.querySelector('.ex-image-data').value = compressedBase64;
+                        block.querySelector('.ex-image-preview').src = compressedBase64;
+                        block.querySelector('.ex-image-preview').classList.remove('hidden');
+                        block.querySelector('.remove-ex-image-btn').classList.remove('hidden');
+                        block.querySelector('.upload-ex-image-placeholder').classList.add('hidden');
+                    }
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        };
+
         window.addExerciseBlock = (exData = null) => {
             exerciseCount++;
             const id = `exercise-${Date.now()}-${exerciseCount}`;
@@ -405,6 +431,7 @@
             const repsVal = exData ? exData.reps : '';
             const weightVal = exData ? exData.weight : '';
             const restVal = exData ? exData.rest : '';
+            const imageVal = (exData && exData.image) ? exData.image : '';
             
             const block = document.createElement('div');
             block.className = "bg-slate-800 p-4 rounded-2xl border border-slate-700 relative group";
@@ -415,9 +442,26 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
                 <div class="space-y-3">
-                    <div>
-                        <input type="text" class="ex-name w-full bg-slate-900/50 text-white rounded-lg p-3 text-sm border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-slate-500" placeholder="Nombre (ej. Sentadilla Libre)" value="${nameVal}">
+                    <div class="flex gap-3">
+                        <!-- Botón Imagen del Ejercicio -->
+                        <div class="w-20 h-20 shrink-0 bg-slate-900/50 rounded-xl border border-slate-700 flex flex-col items-center justify-center overflow-hidden cursor-pointer hover:border-blue-500 transition relative" onclick="document.getElementById('file-${id}').click()">
+                            <input type="file" id="file-${id}" accept="image/*" class="hidden" onchange="processExerciseImage(event, '${id}')">
+                            <input type="hidden" class="ex-image-data" value="${imageVal}">
+                            
+                            <div class="upload-ex-image-placeholder flex flex-col items-center text-slate-500 ${imageVal ? 'hidden' : ''}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                <span class="text-[8px] font-medium">Img</span>
+                            </div>
+                            <img src="${imageVal}" class="ex-image-preview absolute inset-0 w-full h-full object-cover ${imageVal ? '' : 'hidden'}">
+                        </div>
+                        
+                        <!-- Inputs de Nombre -->
+                        <div class="flex-1 flex flex-col justify-between">
+                            <input type="text" class="ex-name w-full bg-slate-900/50 text-white rounded-lg p-3 text-sm border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition placeholder-slate-500" placeholder="Nombre (ej. Sentadilla Libre)" value="${nameVal}">
+                            <button onclick="removeExerciseImage('${id}')" class="remove-ex-image-btn text-[10px] text-red-400 hover:text-red-300 transition text-left mt-1 ${imageVal ? '' : 'hidden'}">Quitar Imagen</button>
+                        </div>
                     </div>
+
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="text-[10px] uppercase text-slate-500 font-bold ml-1">Series</label>
@@ -484,7 +528,8 @@
                     sets: node.querySelector('.ex-sets').value.trim() || '1',
                     reps: node.querySelector('.ex-reps').value.trim() || '10',
                     weight: node.querySelector('.ex-weight').value.trim() || '-',
-                    rest: node.querySelector('.ex-rest').value.trim() || '-'
+                    rest: node.querySelector('.ex-rest').value.trim() || '-',
+                    image: node.querySelector('.ex-image-data').value || null
                 });
             }
 
@@ -498,7 +543,6 @@
                 const index = routinesData.findIndex(r => r.id === editingRoutineId);
                 if(index !== -1) {
                     routinesData[index].name = name;
-                    routinesData[index].image = currentRoutineImage;
                     routinesData[index].exercises = exercises;
                 }
                 showToast("¡Rutina actualizada correctamente!");
@@ -507,7 +551,6 @@
                 const newRoutine = {
                     id: Date.now().toString(),
                     name: name,
-                    image: currentRoutineImage,
                     exercises: exercises,
                     createdAt: Date.now()
                 };
@@ -531,17 +574,6 @@
             newRoutineNameInput.value = routine.name;
             exercisesContainer.innerHTML = '';
             
-            // Cargar imagen si existe
-            if (routine.image) {
-                currentRoutineImage = routine.image;
-                document.getElementById('routine-image-preview').src = routine.image;
-                document.getElementById('routine-image-preview').classList.remove('hidden');
-                document.getElementById('remove-image-btn').classList.remove('hidden');
-                document.getElementById('upload-image-placeholder').classList.add('hidden');
-            } else {
-                window.removeRoutineImage();
-            }
-
             routine.exercises.forEach(ex => addExerciseBlock(ex));
             
             switchView('view-add');
@@ -581,14 +613,6 @@
                 card.onclick = () => openRoutineDetail(routine.id);
                 
                 let backgroundHtml = `<div class="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-bl-[100px] -z-0"></div>`;
-                if (routine.image) {
-                    backgroundHtml = `
-                        <div class="absolute inset-0 z-0">
-                            <img src="${routine.image}" class="w-full h-full object-cover opacity-20 transition group-hover:opacity-30 mix-blend-screen">
-                            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/60 to-transparent"></div>
-                        </div>
-                    `;
-                }
 
                 card.innerHTML = `
                     ${backgroundHtml}
@@ -631,12 +655,23 @@
             routine.exercises.forEach((ex, idx) => {
                 const div = document.createElement('div');
                 div.className = "bg-slate-800 rounded-xl p-4 border border-slate-700/50 flex flex-col gap-2";
+                
+                let imgHtml = '';
+                if (ex.image) {
+                    imgHtml = `<img src="${ex.image}" class="w-12 h-12 rounded-lg object-cover border border-slate-700" alt="${ex.name}">`;
+                } else {
+                    imgHtml = `<div class="w-12 h-12 rounded-lg bg-slate-900 flex items-center justify-center border border-slate-700 text-slate-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg></div>`;
+                }
+
                 div.innerHTML = `
-                    <div class="flex justify-between items-center border-b border-slate-700/50 pb-2">
-                        <span class="font-bold text-slate-200 text-sm flex items-center gap-2">
-                            <span class="bg-slate-700 text-xs px-2 py-0.5 rounded text-slate-300">${idx + 1}</span>
-                            ${ex.name}
-                        </span>
+                    <div class="flex justify-between items-center border-b border-slate-700/50 pb-3 mb-1">
+                        <div class="flex items-center gap-3">
+                            ${imgHtml}
+                            <span class="font-bold text-slate-200 text-sm flex items-center gap-2">
+                                <span class="bg-slate-700 text-xs px-2 py-0.5 rounded text-slate-300">${idx + 1}</span>
+                                ${ex.name}
+                            </span>
+                        </div>
                     </div>
                     <div class="grid grid-cols-4 gap-2 text-center pt-1">
                         <div class="flex flex-col">
@@ -696,6 +731,11 @@
                 const bgClass = isCompleted ? 'bg-slate-800/40 border-slate-700/30' : 'bg-slate-800 border-slate-700 shadow-lg';
                 const textClass = isCompleted ? 'text-slate-500 line-through' : 'text-white';
                 
+                let imgHtml = '';
+                if (ex.image) {
+                    imgHtml = `<img src="${ex.image}" class="w-16 h-16 rounded-xl object-cover border border-slate-700 ${isCompleted ? 'opacity-50 grayscale' : ''}" alt="${ex.name}">`;
+                }
+
                 card.className = `${bgClass} rounded-2xl p-5 border transition-all duration-300`;
                 card.innerHTML = `
                     <div class="flex items-start gap-4">
@@ -704,8 +744,11 @@
                                 ${isCompleted ? 'checked' : ''} 
                                 onchange="toggleExercise(${index}, this.checked)">
                         </div>
-                        <div class="flex-1">
-                            <h3 class="text-lg font-bold ${textClass} line-through-transition mb-3">${ex.name}</h3>
+                        <div class="flex-1 flex flex-col gap-3">
+                            <div class="flex gap-3 items-center">
+                                ${imgHtml}
+                                <h3 class="text-lg font-bold ${textClass} line-through-transition">${ex.name}</h3>
+                            </div>
                             <div class="grid grid-cols-2 gap-3">
                                 <div class="bg-slate-900/50 rounded-lg p-2 flex items-center justify-between">
                                     <span class="text-[10px] uppercase text-slate-500 font-bold">Series</span>
@@ -788,51 +831,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             initApp();
             switchView('view-home');
-
-            // Lógica para procesar la subida de imagen
-            const imageInput = document.getElementById('routine-image-input');
-            if(imageInput) {
-                imageInput.addEventListener('change', function(e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            // Redimensionar para evitar problemas de cuota en LocalStorage
-                            const canvas = document.createElement('canvas');
-                            const MAX_SIZE = 600; // Ancho o alto máximo de compresión
-                            let width = img.width;
-                            let height = img.height;
-                            
-                            if (width > height && width > MAX_SIZE) {
-                                height *= MAX_SIZE / width;
-                                width = MAX_SIZE;
-                            } else if (height > MAX_SIZE) {
-                                width *= MAX_SIZE / height;
-                                height = MAX_SIZE;
-                            }
-                            
-                            canvas.width = width;
-                            canvas.height = height;
-                            const ctx = canvas.getContext('2d');
-                            ctx.drawImage(img, 0, 0, width, height);
-                            
-                            // Convertir y comprimir a JPEG Base64
-                            currentRoutineImage = canvas.toDataURL('image/jpeg', 0.6);
-                            
-                            const preview = document.getElementById('routine-image-preview');
-                            preview.src = currentRoutineImage;
-                            preview.classList.remove('hidden');
-                            document.getElementById('remove-image-btn').classList.remove('hidden');
-                            document.getElementById('upload-image-placeholder').classList.add('hidden');
-                        };
-                        img.src = event.target.result;
-                    };
-                    reader.readAsDataURL(file);
-                });
-            }
         });
 
     </script>
